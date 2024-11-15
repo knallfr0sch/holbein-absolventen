@@ -51,6 +51,7 @@ defined('_VIKBOOKINGEXEC') OR die('Restricted Area');
 
 ?>
 
+
 <center class="text-direction-{lang_direction}" style="background: #fdfdfd; padding: 40px 0; color: #666; width: 100%; table-layout: fixed; direction: {lang_direction};">
 	<div style="text-align: center;">
 			<p>{logo}</p>
@@ -71,6 +72,36 @@ defined('_VIKBOOKINGEXEC') OR die('Restricted Area');
 						<tr>
 						<td width="50%" valign="top">
 						<![endif]-->
+
+						<div>
+							<?php
+							// PIN CODE, falls vorhanden.
+							$custData = $booking_info['custdata'];
+							$pattern = '/PIN:\s+(\d+)/';
+							preg_match($pattern, $custData, $matches);
+
+							if($booking_info['status'] == "confirmed" && isset($matches[1])) {
+								$pinCode = $matches[1];
+								echo '<div style="width: 100%; max-width: 355px; display: inline-block; vertical-align: top; text-align: {text_natural_direction};">
+								<table width="90%" style="margin: 10px auto 0; padding: 5px; font-size: 14px; background:#f2f3f7;">
+									<tr>
+										<td style="padding: 10px; line-height: 1.4em;">
+											<div style="min-height: 270px;">
+												<h3 style="background:#78B8C4; display:inline-block; padding:5px 10px; text-transform:uppercase; font-size:16px; color:#fff;">PIN Code</h3>
+												<div>
+													<p><span>';
+													echo $pinCode; echo '</span></p>
+												</div>
+											</div>
+										</td>
+									</tr>
+								</table>
+							</div>';
+							}
+							
+							?>
+						</div>
+
 						<div style="width: 100%; max-width: 355px; display: inline-block; vertical-align: top; text-align: {text_natural_direction};">
 							<table width="90%" style="margin: 10px auto 0; padding: 5px; font-size: 14px; background:#f2f3f7;">
 								<tr>
@@ -205,27 +236,28 @@ defined('_VIKBOOKINGEXEC') OR die('Restricted Area');
 											<div>{order_deposit}</div>
 											<div>{order_total_paid}</div>
 										</div>
+										<div>
+											<?php
+												//Zahlungssauforderung nur bei Buchungsanfrage
+												//Also nicht bei bestätigten Buchungen
+												if($booking_info['status'] == "standby") {
+													echo '<h3 style="background:#78B8C4; display:inline-block; padding:5px 10px; text-transform:uppercase; font-size:16px; color:#fff;">ÜBERWEISUNG</h3>
+													<div style="padding:10px; margin:2px 0;">
+														<div>
+															Vereinigung der Absolventen des Holbeingymnasiums
+														</div>
+														<div>
+															IBAN: <strong>DE68720302270001399005</strong> bei Bankgeschäft A. Hafner, BIC: <strong>ANHODE77XXX</strong>
+														</div>
+														<div>
+															Gebt eure Auftragsnummer "<span>{order_id}</span>" und euren Namen bei der Überweisung an, damit wir die Buchung zuordnen können.
+														</div>
+													</div>';
+												}
+											?>
+										</div>
+										
 									</div>	
-								</td>
-							</tr>
-						</table>
-					</td>
-				</tr>
-				<tr>
-					<td style="padding: 0; text-align: center;">
-						<table width="95%" style="border-spacing: 0; margin: 0 auto; font-size: 14px; background: #fff;">
-							<tr>
-								<td style="line-height: 1.4em; text-align: {text_natural_direction};">
-									<div>
-										<strong><?php echo JText::_('VBLIBTENTHREE'); ?></strong><br/>
-										{order_link}
-									</div>
-									<div>
-										<div>{footer_emailtext}</div>
-									</div>
-									<div>
-										<br/>
-									</div>
 								</td>
 							</tr>
 						</table>

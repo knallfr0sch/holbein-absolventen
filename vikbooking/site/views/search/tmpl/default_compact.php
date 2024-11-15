@@ -330,6 +330,17 @@ function vboCompactCountSelected(idroom) {
 	}
 	return totselected;
 }
+function vboCompactCountBooked() {
+	return vboCompactCountSelected();
+	// var totbooked = 0;
+	// for (var i = 1; i <= vboNeededBooked; i++) {
+	// 	var inpslot = document.getElementById('roomopt' + i).value;
+	// 	if (inpslot.length && parseInt(inpslot) > 0) {
+	// 		totbooked++;
+	// 	}
+	// }
+	// return totbooked;
+}
 /**
  * Checks whether a slot is occupied by another room. Returns false or an array with the occupier information.
  */
@@ -420,41 +431,213 @@ function vboCompactUpdateParties() {
 }
 
 function vboCompactSelRoom(indroom, idroom, units) {
-    var selectedRoomCapacity = vboCompactCountSelected();
+	// adjust vars
+	units = parseInt(units);
 
-	if (selectedRoomCapacity == vboNeededBooked) {
-        document.getElementById('vbsearchmainsbmt').style.display = 'block';
-		jQuery('.vbo-room-result-body-bookmsg, .vbo-room-result-body-bookbtn').fadeIn();
-    } else {
-        document.getElementById('vbsearchmainsbmt').style.display = 'none';
-		jQuery('.vbo-room-result-body-bookmsg, .vbo-room-result-body-bookbtn').hide();
-    }
-}
-
-
-function vboCompactProceed() {
-    var selectedRoomCapacity = vboCompactCountSelected();
-
-	if (selectedRoomCapacity != vboNeededBooked) {
-        window.alert('Fehler beim Buchen.')
-        return undefined;
-    }
-
-
-    var dropdowns = document.getElementsByTagName('select');
-
-    // The guest currently being assigned to a room.
-    var guestIndex = 0;
-
-    for (var roomNumbe = 0; roomNumbe < dropdowns.length; roomNumbe++) {
-		var guestsSelectedForThisRoom = parseInt(dropdowns.item(i).value);
-        for (var guestIndexPerRoom = 0; guestIndexPerRoom < guestsSelectedForThisRoom; guestIndexPerRoom++) {
-            document.getElementById('roomopt' + guestIndex).value = guestIndex;
-            guestIndex++;
-        }
+	// update rooms units counter and assigned for visible drop downs
+	if (!vboRoomsUnitsPool.hasOwnProperty(idroom)) {
+		vboRoomsUnitsPool[idroom] = {};
+		vboRoomsAssigned[idroom] = {};
+	}
+	if (!vboRoomsUnitsPool[idroom].hasOwnProperty(indroom)) {
+		vboRoomsUnitsPool[idroom][indroom] = units;
+		vboRoomsAssigned[idroom][indroom] = new Array;
+	}
+	var adding_units = (vboRoomsUnitsPool[idroom][indroom] <= units);
+	var removing_units = !adding_units ? (vboRoomsUnitsPool[idroom][indroom] - units) : 0;
+	var truly_removing = !adding_units;
+	if (truly_removing && removing_units > 0 && units > 0 && (vboCompactCountBooked() - removing_units + units) == vboNeededBooked) {
+		truly_removing = false;
 	}
 
+	// update units selected for this drop down
+	vboRoomsUnitsPool[idroom][indroom] = units;
 
+	if (adding_units) {
+		// populate fields when adding units
+		var indcounter = 0;
+		var units_added = 0;
+		var slot_occupied = vboCompactIsSlotOccupied(indroom, idroom);
+		if (units === 1 && (vboRoomsParties[idroom].length === 1 || slot_occupied === false)) {
+			// occupy exact party requested for one unit when room not suited for other parties or when slot is free
+			if (slot_occupied !== false) {
+				vboCompactMakeSlotFree(slot_occupied[0], slot_occupied[1]);
+			}
+			indcounter++;
+			units_added++;
+			document.getElementById('roomopt' + indroom).value = idroom;
+			vboPartiesRequested[indroom] = idroom;
+			vboRoomsAssigned[idroom][indroom].push(indroom);
+		}
+
+		// selected more than one unit, or one unit for a room that is suitable for multiple parties
+		for (var i = indcounter; i < units; i++) {
+			// fill all containers valid for this room party until the units requested are reached
+			var indparty = vboRoomsParties[idroom][i];
+			if (!document.getElementById('roomopt' + indparty).value.length) {
+				// populate first available party for this room
+				units_added++;
+				document.getElementById('roomopt' + indparty).value = idroom;
+				vboPartiesRequested[indparty] = idroom;
+				vboRoomsAssigned[idroom][indroom].push(indparty);
+			} else {
+				// find the next available party slot for this room
+				var party_filled = 0;
+				for (var j in vboRoomsParties[idroom]) {
+					if (!vboRoomsParties[idroom].hasOwnProperty(j)) {
+						continue;
+					}
+					var indparty = vboRoomsParties[idroom][j];
+					if (!document.getElementById('roomopt' + indparty).value.length) {
+						// populate available party slot for this room
+						party_filled++;
+						units_added++;
+						document.getElementById('roomopt' + indparty).value = idroom;
+						vboPartiesRequested[indparty] = idroom;
+						vboRoomsAssigned[idroom][indroom].push(indparty);
+						break;
+					}
+				}
+				if (!units_added || !party_filled) {
+					/**
+					 * All room-parties that this room can accommodate have been booked.
+					 * In case of large room parties, this kind of situations could occur.
+					 */
+					var totbooked = vboCompactCountBooked();
+					if (totbooked < vboNeededBooked) {
+						var indparty = totbooked + 1;
+						if (!document.getElementById('roomopt' + indparty).value.length) {
+							// populate next available party for this room
+							units_added++;
+							document.getElementById('roomopt' + indparty).value = idroom;
+							vboPartiesRequested[indparty] = idroom;
+							vboRoomsAssigned[idroom][indroom].push(indparty);
+						}
+					}
+				}
+			}
+		}
+	} else if (truly_removing) {
+		// get the reversed list of parties assigned (use .slice() before .reverse() to avoid referencing)
+		var vbo_room_party_revass = vboRoomsAssigned[idroom][indroom].slice().reverse();
+		// decreasing units from the previous selection
+		for (var i = (removing_units - 1); i >= 0; i--) {
+			// iterate the pool of rooms assigned starting from the first one added (last, but in a reverse order is like the first)
+			if (!vbo_room_party_revass.hasOwnProperty(i)) {
+				continue;
+			}
+			// current-first index added
+			var rmparty = vbo_room_party_revass[i];
+			// unset room booked
+			document.getElementById('roomopt' + rmparty).value = '';
+			for (var rmi in vboRoomsAssigned[idroom][indroom]) {
+				if (!vboRoomsAssigned[idroom][indroom].hasOwnProperty(rmi)) {
+					continue;
+				}
+				if (vboRoomsAssigned[idroom][indroom][rmi] == rmparty) {
+					vboRoomsAssigned[idroom][indroom].splice(rmi, 1);
+					break;
+				}
+			}
+			if (vboPartiesRequested.hasOwnProperty(rmparty)) {
+				delete vboPartiesRequested[rmparty];
+			}
+		}
+	}
+
+	// count rooms selected of this type
+	var roomtotsel = vboCompactCountSelected(idroom);
+	if (roomtotsel >= vboRoomsUnits[idroom]) {
+		// no more units available for this room-type
+		jQuery('.vbo-selroom-room' + idroom).not('#vbo-selroom-' + indroom + '-' + idroom).prop('disabled', true).closest('.vbo-room-result-body-bookingsolution').addClass('vbo-room-result-soldout');
+	} else {
+		// other units available for this room-type
+		jQuery('.vbo-selroom-room' + idroom).prop('disabled', false).closest('.vbo-room-result-body-bookingsolution').removeClass('vbo-room-result-soldout');
+	}
+
+	// count non-empty input fields
+	var totbooked = vboCompactCountBooked();
+
+	// @Sebastian the == case and the > case are now split.
+	if (totbooked == vboNeededBooked) {
+		// proceed with booking process, all rooms selected
+		document.getElementById('vbsearchmainsbmt').style.display = 'block';
+		jQuery('.vbo-room-result-body-bookmsg, .vbo-room-result-body-bookbtn').hide();
+		// show the book now button only next to the rooms selected
+		for (var i = 1; i <= vboNeededBooked; i++) {
+			var idroomsel = jQuery('#roomopt' + i).val();
+			if (!idroomsel || !idroomsel.length) {
+				continue;
+			}
+			jQuery('.vbo-selroom-room' + idroomsel).each(function(k, v) {
+				var elem = jQuery(v);
+				if (elem.val() > 0) {
+					elem.closest('.vbo-room-result-body-bookingsolution').find('.vbo-room-result-body-bookbtn').fadeIn();
+				}
+			});
+		}
+
+		// @Sebastian setting it by hand
+		var dropdowns = document.getElementsByClassName('vbo-selroom-ddown');
+		var guestIndex = 1;
+
+		[...dropdowns].forEach((dropdown, dropdownIndex) => {
+
+			// DOMTokenList(3) [ "vbo-selroom-ddown", "vbo-selroom-room1", "vbo-selroom-party1" ]
+			var className = dropdown.className.split(' ').find(classInList => classInList.includes('vbo-selroom-room'));
+			// 'vbo-selroom-room1' => Room 1
+			var roomIndexString = className.replace('vbo-selroom-room', '');
+			// '1'
+			var roomIndex = parseInt(roomIndexString)
+
+				var guestsSelectedForThisRoom = parseInt(dropdowns.item(dropdownIndex).value);
+				for (var guestIndexPerRoom = 0; guestIndexPerRoom < guestsSelectedForThisRoom; guestIndexPerRoom++) {
+					var roomOptSelect = 'roomopt' + guestIndex.toString();	
+					(document.getElementById(roomOptSelect)).value = roomIndex;
+					guestIndex++;
+				}
+		});		
+	} else if (totbooked < vboNeededBooked) {
+		// missing rooms to select for booking
+		document.getElementById('vbsearchmainsbmt').style.display = 'none';
+		jQuery('.vbo-room-result-body-bookmsg, .vbo-room-result-body-bookbtn').hide();
+		console.log(`vboNeededBooked: ${vboNeededBooked}`);
+		console.log(`totbooked: ${totbooked}`);
+		var missingrooms = vboNeededBooked - totbooked;
+		var missmsg = missingrooms === 1 ? vboCompactMsg.missingRoomsSi : vboCompactMsg.missingRoomsPl;
+		missmsg = missmsg.replace('%d', missingrooms);
+		// display the message only if more rooms can be selected
+		jQuery('.vbo-selroom-ddown').each(function(k, v) {
+			var elem = jQuery(v);
+			if (elem.val() != elem.find('option').last().attr('value') && elem.prop('disabled') === false) {
+				// more units can be selected and drop down not disabled
+				elem.closest('.vbo-room-result-body-bookingsolution').find('.vbo-room-result-body-bookmsg').text(missmsg).show();
+			} else if (totbooked == 0 && elem.val() > 0 && elem.prop('disabled') === false) {
+				// reset units
+				elem.val('0');
+				// display message for this room as well
+				elem.closest('.vbo-room-result-body-bookingsolution').find('.vbo-room-result-body-bookmsg').text(missmsg).show();
+			}
+		});
+	} else if (totbooked > vboNeededBooked) {
+		document.getElementById('vbsearchmainsbmt').style.display = 'none';
+		jQuery('.vbo-room-result-body-bookmsg, .vbo-room-result-body-bookbtn').hide();
+
+		jQuery('.vbo-selroom-ddown').each(function(k, v) {
+			var elem = jQuery(v);
+			var lessBeds = 'Weniger Betten wählen.';
+			if (elem.val() > 0 && elem.prop('disabled') === false) {
+				// Select less rooms
+				elem.closest('.vbo-room-result-body-bookingsolution').find('.vbo-room-result-body-bookmsg').text(lessBeds).show();
+			} else if (elem.val() === 0 && elem.prop('disabled') === false) {
+				// Remove message for this room
+				elem.closest('.vbo-room-result-body-bookingsolution').find('.vbo-room-result-body-bookmsg').text(missmsg).hide();
+			}
+		});
+	}
+}
+
+function vboCompactProceed() {
 	document.getElementById('vbselectroomform').submit();
 }
 
